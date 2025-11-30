@@ -1,0 +1,61 @@
+// This function now handles all interactions with the sheet
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const bookingSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Bookings");
+
+    if (data.action === "validate_and_decrement_use") {
+      // --- This block handles entry/exit validation ---
+      const sheetData = bookingSheet.getRange("A:L").getValues(); // Read all columns including UsesLeft
+      const header = sheetData[0];
+      
+      let rowToUpdate = -1;
+      let currentUses = -1;
+
+      for (let i = 1; i < sheetData.length; i++) { // Start from 1 to skip header
+        if (sheetData[i][0] == data.bookingId) { // Column A is BookingID
+          rowToUpdate = i + 1; // Sheet rows are 1-indexed
+          currentUses = parseInt(sheetData[i][11]); // Column L is UsesLeft (index 11)
+          break;
+        }
+      }
+
+      if (rowToUpdate !== -1) {
+        if (currentUses > 0) {
+          // The ticket is valid. Decrement the uses.
+          bookingSheet.getRange(rowToUpdate, 12).setValue(currentUses - 1); // Update Column L
+          return ContentService.createTextOutput(JSON.stringify({ "status": "success", "message": "Use validated." }))
+                             .setMimeType(ContentService.MimeType.JSON);
+        } else {
+          // The ticket has no uses left.
+          return ContentService.createTextOutput(JSON.stringify({ "status": "error", "message": "Ticket has no uses left." }))
+                             .setMimeType(ContentService.MimeType.JSON);
+        }
+      } else {
+        throw new Error("Booking ID not found for validation.");
+      }
+
+    } else {
+      // --- This block handles a brand new web booking ---
+      const bookingStartTimeISO = new Date(data.bookingStartTime).toISOString();
+      const bookingEndTimeISO = new Date(data.bookingEndTime).toISOString();
+
+      // Append all data INCLUDING the initial UsesLeft value of 2
+      bookingSheet.appendRow([
+        data.bookingId, data.paymentId, data.areaName, data.slotNumber,
+        data.duration, data.totalCost, bookingStartTimeISO, bookingEndTimeISO,
+        "Paid", // Status (still good to have for records)
+        "", // ActualEntryTime (blank)
+        "", // ActualExitTime (blank)
+        2   // <-- THIS IS THE FIX: Set UsesLeft to 2 for a new ticket
+      ]);
+
+      return ContentService.createTextOutput(JSON.stringify({ "status": "success", "message": "Web booking recorded." }))
+                         .setMimeType(ContentService.MimeType.JSON);
+    }
+
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ "status": "error", "message": error.message }))
+                       .setMimeType(ContentService.MimeType.JSON);
+  }
+}
