@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Smart Park - Find Your Spot</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
+    <style>
+        :root { --primary-blue: #007BFF; --secondary-blue: #0056b3; --light-bg: #f8f9fa; --text-dark: #343a40; --text-light: #6c757d; --success: #28a745; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Roboto', sans-serif; background-color: var(--light-bg); color: var(--text-dark); }
+        .container { max-width: 900px; margin: 40px auto; padding: 20px; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .header h1 { color: var(--primary-blue); font-weight: 700; }
+        .header p { color: var(--text-light); font-size: 1.1rem; margin-bottom: 20px; }
+        .header .button-group { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; }
+        .location-card { background: #fff; border-radius: 15px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); margin-top: 40px; margin-bottom: 20px; padding: 25px; display: flex; align-items: center; }
+        .location-icon { font-size: 2rem; color: var(--primary-blue); margin-right: 25px; }
+        .location-info h3 { margin-bottom: 5px; }
+        .location-meta { color: var(--text-light); }
+        .availability { margin-left: auto; text-align: right; }
+        .slots-free { font-size: 1.5rem; font-weight: 700; color: var(--success); }
+        .btn-select { background-color: var(--primary-blue); color: #fff; border: none; border-radius: 25px; padding: 10px 25px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-block; }
+        #parkingMapContainer { width: 100%; height: 500px; margin-top: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); overflow: hidden; display: none; }
+        
+        /* Styles for the pop-up info window on the map */
+        .info-content h3 { margin: 0 0 5px 0; }
+        .info-content p { margin: 0 0 10px 0; }
+        .info-content .button-container { display: flex; gap: 10px; } /* NEW: Container for buttons */
+        .info-content button {
+            background-color: var(--primary-blue); border: none; color: white; padding: 8px 16px;
+            font-size: 14px; cursor: pointer; border-radius: 25px;
+        }
+        .info-content .navigate-btn { background-color: var(--success); } /* Green for navigate */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Find Parking in Bengaluru</h1>
+            <p>Select an area to view available slots and book your spot instantly.</p>
+            <div class="button-group">
+                <a href="gate.html" class="btn-select" style="background-color: var(--success);">Enter / Exit Parking</a>
+                <button id="showMapButton" class="btn-select">Show Map</button>
+            </div>
+        </div>
+        <div id="parkingMapContainer"></div>
+        <div id="location-list">
+            <p style="text-align:center;">Loading locations...</p>
+        </div>
+    </div>
+
+    <!-- Script to fetch location list -->
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const locationList = document.getElementById('location-list');
+        const fetchLocations = () => {
+            fetch('/api/locations')
+                .then(response => response.json())
+                .then(locations => {
+                    if (!locations || locations.length === 0) {
+                        locationList.innerHTML = `<p style="text-align:center;">No parking locations found.</p>`;
+                        return;
+                    }
+                    locationList.innerHTML = locations.map(loc => `
+                        <div class="location-card">
+                            <div class="location-icon"><i class="fas fa-map-marker-alt"></i></div>
+                            <div class="location-info">
+                                <h3>${loc.name}</h3>
+                                <div class="location-meta">Total Spots: ${loc.total}</div>
+                            </div>
+                            <div class="availability">
+                                <div class="slots-free">${loc.available}</div>
+                                <div>Available Slots</div>
+                                <a href="checkout.html?area=${loc.id}" class="btn-select">View Slots</a>
+                            </div>
+                        </div>
+                    `).join('');
+                });
+        };
+        fetchLocations();
+    });
+    </script>
+
+    <!-- Google Maps API and custom map logic -->
+    <!-- IMPORTANT: Paste your correct and unrestricted API key below -->
+    <script async 
+            src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDpgOcnGwPkGun2fHZgXxbCcI_A-HJq9CY&callback=initMap">
+    </script>
+    <script>
+        let map;
+        let mapInitialized = false;
+
+        function initMap() {
+            const showMapButton = document.getElementById('showMapButton');
+            const mapContainer = document.getElementById('parkingMapContainer');
+            showMapButton.addEventListener('click', () => {
+                if (mapContainer.style.display === 'none' || mapContainer.style.display === '') {
+                    mapContainer.style.display = 'block';
+                    showMapButton.textContent = 'Hide Map';
+                    if (!mapInitialized) {
+                        createAndLoadMap();
+                        mapInitialized = true;
+                    } else {
+                        google.maps.event.trigger(map, 'resize');
+                    }
+                } else {
+                    mapContainer.style.display = 'none';
+                    showMapButton.textContent = 'Show Map';
+                }
+            });
+        }
+
+        async function createAndLoadMap() {
+            const defaultCenter = { lat: 12.9716, lng: 77.5946 };
+            map = new google.maps.Map(document.getElementById("parkingMapContainer"), { center: defaultCenter, zoom: 12 });
+            let markers = [];
+            try {
+                const response = await fetch('/api/locations');
+                const locations = await response.json();
+                const bounds = new google.maps.LatLngBounds();
+                locations.forEach(location => {
+                    if (location.lat && location.lng) {
+                        const marker = new google.maps.Marker({ position: { lat: location.lat, lng: location.lng }, map: map, title: location.name });
+                        markers.push(marker);
+
+                        // --- THIS IS THE FIX ---
+                        // The content now includes two buttons with different functions
+                        const infoContent = `
+                            <div class="info-content">
+                                <h3>${location.name}</h3>
+                                <p>Available: <strong>${location.available} / ${location.total}</strong></p>
+                                <div class="button-container">
+                                    <a href="checkout.html?area=${location.id}"><button>View Slots</button></a>
+                                    <button class="navigate-btn" onclick="navigateToParking(${location.lat}, ${location.lng})">Navigate Here</button>
+                                </div>
+                            </div>
+                        `;
+
+                        const infoWindow = new google.maps.InfoWindow({ content: infoContent });
+                        marker.addListener("click", () => {
+                            markers.forEach(m => { if (m.infoWindow) m.infoWindow.close(); });
+                            infoWindow.open(map, marker);
+                            marker.infoWindow = infoWindow;
+                        });
+                        bounds.extend(marker.getPosition());
+                    }
+                });
+                if (markers.length > 0) map.fitBounds(bounds);
+            } catch (error) {
+                document.getElementById("parkingMapContainer").innerHTML = `<p style="text-align:center;color:red;padding:20px;">Could not load map data.</p>`;
+            }
+        }
+        
+        // --- THIS IS THE NEW FUNCTION ---
+        // It opens a new tab with Google Maps directions
+        function navigateToParking(lat, lng) {
+            const destination = `${lat},${lng}`;
+            const url = `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving`;
+            window.open(url, '_blank'); // Opens in a new tab
+        }
+
+        window.initMap = initMap;
+    </script>
+</body>
+</html>

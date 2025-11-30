@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Select Your Slot</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
+    <style>
+        :root { --primary-blue: #007BFF; --secondary-blue: #0056b3; --light-bg: #f8f9fa; --text-dark: #343a40; --available: #28a745; --booked: #dc3545; --selected: #ffc107; }
+        body { font-family: 'Roboto', sans-serif; background-color: var(--light-bg); }
+        .container { max-width: 1000px; margin: 40px auto; padding: 20px; display: grid; grid-template-columns: 2fr 1fr; gap: 30px; }
+        .parking-layout { background: #fff; padding: 30px; border-radius: 15px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+        .parking-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 15px; }
+        .slot {
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+            font-size: 1.2rem;
+        }
+        .slot.available { background-color: #eaf6ec; color: var(--available); border: 2px solid var(--available); }
+        .slot.available:hover { background-color: var(--available); color: #fff; }
+        .slot.booked { background-color: #fbeaea; color: var(--booked); border: 2px solid var(--booked); cursor: not-allowed; }
+        .slot.selected { background-color: var(--selected); color: #fff; border: 2px solid var(--selected); }
+        .booking-summary { background: #fff; padding: 30px; border-radius: 15px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+        h2 { color: var(--primary-blue); margin-bottom: 20px; }
+        .summary-item { margin-bottom: 15px; }
+        .summary-item label { display: block; margin-bottom: 5px; font-weight: 700; }
+        .summary-item input, .summary-item select { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-family: 'Roboto', sans-serif; font-size: 1rem; }
+        .total-cost { margin-top: 20px; text-align: center; font-size: 1.8rem; font-weight: 700; color: var(--primary-blue); }
+        .btn-pay { width: 100%; padding: 15px; background-color: var(--primary-blue); color: #fff; border: none; border-radius: 8px; font-size: 1.2rem; font-weight: 700; cursor: pointer; margin-top: 20px; transition: background-color 0.2s; }
+        .btn-pay:hover { background-color: var(--secondary-blue); }
+        .btn-pay:disabled { background-color: #a2c9f5; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="parking-layout">
+            <h2 id="area-name">Parking Slots</h2>
+            <div class="parking-grid" id="parking-grid"></div>
+        </div>
+        <div class="booking-summary">
+            <h2>Booking Details</h2>
+            <div class="summary-item">
+                <label for="booking-time">Select Booking Start Time</label>
+                <input type="datetime-local" id="booking-time">
+            </div>
+            <div class="summary-item">
+                <label for="duration">Duration (Hours)</label>
+                <select id="duration">
+                    <option value="1">1 Hour</option>
+                    <option value="2">2 Hours</option>
+                    <option value="3">3 Hours</option>
+                </select>
+            </div>
+            <hr style="margin: 20px 0;">
+            <div class="summary-item">
+                <label>Selected Slot</label>
+                <input type="text" id="selected-slot" value="None" readonly>
+            </div>
+            <div class="total-cost" id="total-cost">₹0.00</div>
+            <button class="btn-pay" id="pay-btn" disabled>Proceed to Pay</button>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        const parkingGrid = document.getElementById('parking-grid');
+        const areaNameEl = document.getElementById('area-name');
+        const selectedSlotEl = document.getElementById('selected-slot');
+        const durationEl = document.getElementById('duration');
+        const totalCostEl = document.getElementById('total-cost');
+        const payBtn = document.getElementById('pay-btn');
+        const bookingTimeEl = document.getElementById('booking-time');
+
+        const params = new URLSearchParams(window.location.search);
+        const areaId = params.get('area');
+        const pricePerHour = 20; // Corrected as per your new requirement
+        let currentSelectedSlot = null;
+        let areaData = null;
+
+        function updateCost() {
+            const duration = parseInt(durationEl.value);
+            const cost = duration * pricePerHour;
+            totalCostEl.textContent = `₹${cost.toFixed(2)}`;
+        }
+
+        function setDefaultTime() {
+            const now = new Date();
+            const year = now.getFullYear(), month = String(now.getMonth() + 1).padStart(2, '0'), day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0'), minutes = String(now.getMinutes()).padStart(2, '0');
+            bookingTimeEl.min = `${year}-${month}-${day}T${hours}:${minutes}`;
+            now.setHours(now.getHours() + 1, 0, 0, 0);
+            const defaultYear = now.getFullYear(), defaultMonth = String(now.getMonth() + 1).padStart(2, '0'), defaultDay = String(now.getDate()).padStart(2, '0');
+            const defaultHours = String(now.getHours()).padStart(2, '0');
+            bookingTimeEl.value = `${defaultYear}-${defaultMonth}-${defaultDay}T${defaultHours}:00`;
+        }
+        setDefaultTime();
+
+        try {
+            const response = await fetch(`/api/slots/${areaId}`);
+            if (!response.ok) throw new Error('Area not found');
+            areaData = await response.json();
+            areaNameEl.textContent = `Parking Slots at ${areaData.name}`;
+            for (let i = 1; i <= areaData.totalSlots; i++) {
+                const slot = document.createElement('div');
+                slot.classList.add('slot');
+                slot.dataset.slotNumber = i;
+                slot.textContent = i;
+                parkingGrid.appendChild(slot);
+            }
+        } catch (error) {
+            console.error('Failed to load initial area data:', error);
+            parkingGrid.innerHTML = `<p style="text-align:center; color:red;">Could not load parking slots.</p>`;
+        }
+
+        function updateSlotAvailability() {
+            if (!areaData) return;
+
+            const selectedSlotNumberBeforeUpdate = currentSelectedSlot ? parseInt(currentSelectedSlot.dataset.slotNumber) : null;
+
+            const selectedStartTime = new Date(bookingTimeEl.value).getTime();
+            const durationInMs = parseInt(durationEl.value) * 60 * 60 * 1000;
+            const selectedEndTime = selectedStartTime + durationInMs;
+            const allSlots = document.querySelectorAll('.slot');
+
+            allSlots.forEach(slot => {
+                const slotNumber = parseInt(slot.dataset.slotNumber);
+                let isAvailable = true;
+                let tooltipMessage = '';
+                slot.classList.remove('available', 'booked', 'selected');
+
+                if (areaData.physicallyOccupied && areaData.physicallyOccupied.includes(slotNumber)) {
+                    isAvailable = false;
+                    tooltipMessage = "This slot is currently occupied by a vehicle.";
+                }
+
+                if (isAvailable && areaData.bookings) {
+                    for (const booking of areaData.bookings) {
+                        if (booking.slotNumber === slotNumber) {
+                            if (selectedStartTime < booking.endTime && selectedEndTime > booking.startTime) {
+                                isAvailable = false;
+                                const freeAtDate = new Date(booking.endTime);
+                                tooltipMessage = `Pre-booked from: ${new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\nWill be free after: ${freeAtDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                slot.title = tooltipMessage;
+                if (isAvailable) slot.classList.add('available');
+                else slot.classList.add('booked');
+            });
+            
+            // Re-apply selection after updating availability
+            if (selectedSlotNumberBeforeUpdate) {
+                const reselectedSlot = document.querySelector(`.slot.available[data-slot-number='${selectedSlotNumberBeforeUpdate}']`);
+                if (reselectedSlot) {
+                    reselectedSlot.classList.add('selected');
+                    currentSelectedSlot = reselectedSlot;
+                } else {
+                    currentSelectedSlot = null;
+                    selectedSlotEl.value = "None";
+                    payBtn.disabled = false; // Should be disabled
+                }
+            }
+        }
+        
+        // --- THIS IS THE FIX ---
+        // The click listener must be on the parent grid, not individual slots.
+        parkingGrid.addEventListener('click', (e) => {
+            const clickedSlot = e.target.closest('.slot.available');
+            if (!clickedSlot) return; // Ignore clicks on booked slots or gaps
+            
+            // Deselect old slot if one was selected
+            if (currentSelectedSlot) {
+                currentSelectedSlot.classList.remove('selected');
+            }
+
+            // Select the new one
+            clickedSlot.classList.add('selected');
+            currentSelectedSlot = clickedSlot; // Update the reference
+
+            // Update UI
+            selectedSlotEl.value = `Slot #${currentSelectedSlot.dataset.slotNumber}`;
+            payBtn.disabled = false;
+        });
+
+        bookingTimeEl.addEventListener('change', updateSlotAvailability);
+        durationEl.addEventListener('change', () => {
+            updateSlotAvailability();
+            updateCost();
+        });
+
+        payBtn.addEventListener('click', () => {
+            if (!currentSelectedSlot) return;
+            const bookingDetails = {
+                areaId: areaId, areaName: areaData.name, slotNumber: currentSelectedSlot.dataset.slotNumber,
+                duration: parseInt(durationEl.value), totalCost: parseInt(durationEl.value) * pricePerHour,
+                startTime: new Date(bookingTimeEl.value).getTime()
+            };
+            sessionStorage.setItem('bookingDetails', JSON.stringify(bookingDetails));
+            window.location.href = '/payment.html';
+        });
+
+        if (areaData) {
+            updateSlotAvailability();
+            updateCost();
+        }
+    });
+    </script>
+</body>
+</html>
