@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Parking Lot Map</title>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        .info-content h3 {
+            margin: 0 0 5px 0;
+        }
+        .info-content p {
+            margin: 0 0 10px 0;
+        }
+        .info-content button {
+            background-color: #007BFF; /* Primary blue to match your theme */
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            margin-top: 5px;
+            cursor: pointer;
+            border-radius: 25px;
+        }
+        .info-content button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <!-- 
+      Load the Google Maps JavaScript API 
+      IMPORTANT: Replace 'YOUR_GOOGLE_MAPS_API_KEY' with your actual, enabled API key.
+    -->
+    <script async defer 
+            src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDpgOcnGwPkGun2fHZgXxbCcI_A-HJq9CY&callback=initMap">
+    </script>
+    
+    <!-- Load your custom map JavaScript file -->
+    <script src="map.js"></script>
+</body>
+</html>

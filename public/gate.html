@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gate Control</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet" />
+    <style>
+        :root { --primary-blue: #007BFF; --secondary-blue: #0056b3; --light-bg: #f8f9fa; --danger: #dc3545; --success: #28a745; }
+        body { font-family: 'Roboto', sans-serif; background-color: var(--light-bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+        .gate-container { background: #fff; padding: 40px; border-radius: 15px; box-shadow: 0 6px 20px rgba(0,0,0,0.1); text-align: center; width: 100%; max-width: 400px; }
+        h1 { color: var(--primary-blue); margin-bottom: 25px; }
+        .input-group { margin-bottom: 20px; }
+        #bookingIdInput { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 1.2rem; text-align: center; text-transform: uppercase; }
+        .button-group { display: flex; gap: 15px; }
+        .gate-btn { flex: 1; padding: 15px; border: none; border-radius: 8px; font-size: 1rem; font-weight: 700; color: #fff; cursor: pointer; transition: background-color 0.2s; }
+        #entryBtn { background-color: var(--success); }
+        #exitBtn { background-color: var(--primary-blue); }
+        .gate-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+        #message { margin-top: 20px; font-weight: 700; min-height: 48px; line-height: 1.4; }
+        .message-error { color: var(--danger); }
+        .message-success { color: var(--success); }
+    </style>
+</head>
+<body>
+    <div class="gate-container">
+        <h1>Gate Access</h1>
+        <div class="input-group">
+            <input type="text" id="bookingIdInput" placeholder="Enter Your Booking ID">
+        </div>
+        <div class="button-group">
+            <button id="entryBtn" class="gate-btn">Enter Parking</button>
+            <button id="exitBtn" class="gate-btn">Exit Parking</button>
+        </div>
+        <p id="message"></p>
+        <a href="/" style="margin-top: 20px; display: inline-block;">Back to Home</a>
+    </div>
+
+    <script>
+        // The JavaScript for this page from the previous messages is correct and does not need to change.
+        // This complete file ensures it's all in one place.
+        const bookingIdInput = document.getElementById('bookingIdInput');
+        const entryBtn = document.getElementById('entryBtn');
+        const exitBtn = document.getElementById('exitBtn');
+        const messageEl = document.getElementById('message');
+        const handleGateAction = async (action) => {
+            const bookingId = bookingIdInput.value.trim().toUpperCase();
+            if (!bookingId) {
+                messageEl.textContent = "Please enter a Booking ID.";
+                messageEl.className = 'message-error';
+                return;
+            }
+            entryBtn.disabled = true;
+            exitBtn.disabled = true;
+            messageEl.textContent = "Processing...";
+            messageEl.className = '';
+            try {
+                const response = await fetch('/api/gate-control', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, bookingId })
+                });
+                const data = await response.json();
+                if (response.status === 402 && data.status === 'overstay') {
+                    sessionStorage.setItem('overstayDetails', JSON.stringify({
+                        bookingId: bookingId, overstayMinutes: data.overstayMinutes, fee: data.fee
+                    }));
+                    window.location.href = 'payment.html';
+                    return;
+                }
+                if (response.ok) {
+                    messageEl.textContent = data.message;
+                    messageEl.className = 'message-success';
+                    if (action === 'exit') {
+                        setTimeout(() => { window.location.href = '/'; }, 3000);
+                    }
+                } else {
+                    messageEl.textContent = `Error: ${data.message}`;
+                    messageEl.className = 'message-error';
+                }
+            } catch (error) {
+                messageEl.textContent = "A network error occurred.";
+                messageEl.className = 'message-error';
+            } finally {
+                if (!(response && response.ok && action === 'exit')) {
+                    entryBtn.disabled = false;
+                    exitBtn.disabled = false;
+                }
+            }
+        };
+        entryBtn.addEventListener('click', () => handleGateAction('entry'));
+        exitBtn.addEventListener('click', () => handleGateAction('exit'));
+    </script>
+</body>
+</html>

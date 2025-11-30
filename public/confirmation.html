@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Booking Confirmed!</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
+    <style>
+        :root { --success: #28a745; --light-bg: #f8f9fa; --primary-blue: #007BFF; }
+        body { font-family: 'Roboto', sans-serif; background-color: var(--light-bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .confirmation-card {
+            background: #fff;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+        }
+        .icon-success { font-size: 4rem; color: var(--success); }
+        h1 { color: var(--success); margin: 20px 0 10px; }
+        .booking-id { font-size: 1.2rem; font-weight: 700; color: #333; background: #e9ecef; padding: 10px; border-radius: 8px; display: inline-block; margin-top: 15px; }
+        .btn-home {
+            display: inline-block;
+            margin-top: 30px;
+            padding: 12px 30px;
+            background-color: var(--primary-blue);
+            color: #fff;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: 700;
+            transition: background-color 0.2s;
+        }
+        .btn-home:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class="confirmation-card">
+        <div class="icon-success"><i class="fas fa-check-circle"></i></div>
+        <h1>Booking Confirmed!</h1>
+        <p>Your parking spot is reserved. Please show this confirmation at the entry.</p>
+        <p>Your Booking ID is:</p>
+        <div class="booking-id" id="booking-id">Loading...</div>
+        <a href="index.html" class="btn-home">Back to Home</a>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const bookingId = params.get('bookingId');
+            const bookingIdEl = document.getElementById('booking-id');
+
+            if (bookingId) {
+                bookingIdEl.textContent = bookingId;
+            } else {
+                bookingIdEl.textContent = "N/A";
+            }
+            
+            // Clear session storage to prevent re-booking the same slot
+            sessionStorage.removeItem('bookingDetails');
+        });
+    </script>
+</body>
+</html>

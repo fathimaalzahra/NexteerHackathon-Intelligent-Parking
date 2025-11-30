@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Complete Your Payment</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet" />
+    <!-- This script is necessary for Razorpay integration -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <style>
+        /* THIS IS THE MISSING/BROKEN STYLE SECTION */
+        :root { --primary-blue: #007BFF; --secondary-blue: #0056b3; --light-bg: #f8f9fa; }
+        body { font-family: 'Roboto', sans-serif; background-color: var(--light-bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+        .payment-card {
+            background: #fff;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+            width: 100%;
+            max-width: 450px;
+            text-align: left; /* Changed to left for better layout */
+        }
+        #page-title { color: var(--primary-blue); margin-bottom: 25px; text-align: center; }
+        .detail { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; font-size: 1rem; }
+        .detail span:first-child { font-weight: 700; color: #555; }
+        .detail span:last-child { font-weight: 500; }
+        .detail.total { font-size: 1.5rem; font-weight: 700; color: var(--primary-blue); border-bottom: none; margin-top: 10px; }
+        .btn-pay {
+            width: 100%; padding: 15px; background-color: var(--primary-blue); color: #fff; border: none; border-radius: 8px; font-size: 1.2rem;
+            font-weight: 700; cursor: pointer; margin-top: 30px; transition: background-color 0.2s;
+        }
+        .btn-pay:hover { background-color: var(--secondary-blue); }
+        .btn-pay:disabled { background-color: #a2c9f5; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <div class="payment-card">
+        <h2 id="page-title">Loading...</h2>
+        <div id="summary-container"></div>
+        <button id="razorpay-btn" class="btn-pay">Pay Now</button>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const summaryContainer = document.getElementById('summary-container');
+        const payBtn = document.getElementById('razorpay-btn');
+        const pageTitle = document.getElementById('page-title');
+
+        // Check which type of payment this is
+        const overstayDetails = JSON.parse(sessionStorage.getItem('overstayDetails'));
+        const newBookingDetails = JSON.parse(sessionStorage.getItem('bookingDetails'));
+        
+        let paymentAmount = 0;
+        let paymentDescription = "";
+
+        if (overstayDetails) {
+            pageTitle.textContent = "Overstay Fee Payment";
+            paymentAmount = overstayDetails.fee;
+            paymentDescription = `Overstay fee for Booking ID: ${overstayDetails.bookingId}`;
+            const overstayHours = Math.floor(overstayDetails.overstayMinutes / 60);
+            const overstayMins = overstayDetails.overstayMinutes % 60;
+            summaryContainer.innerHTML = `
+                <div class="detail"><span>Booking ID:</span><span>${overstayDetails.bookingId}</span></div>
+                <div class="detail"><span>Overstay Duration:</span><span>${overstayHours}h ${overstayMins}m</span></div>
+                <div class="detail total"><span>Total Due:</span><span>₹${paymentAmount.toFixed(2)}</span></div>
+            `;
+        } else if (newBookingDetails) {
+            pageTitle.textContent = "Confirm Your Booking";
+            paymentAmount = newBookingDetails.totalCost;
+            paymentDescription = `Booking for Slot #${newBookingDetails.slotNumber} at ${newBookingDetails.areaName}`;
+            summaryContainer.innerHTML = `
+                <div class="detail"><span>Location:</span><span>${newBookingDetails.areaName}</span></div>
+                <div class="detail"><span>Slot Number:</span><span>#${newBookingDetails.slotNumber}</span></div>
+                <div class="detail"><span>Duration:</span><span>${newBookingDetails.duration} Hours</span></div>
+                <div class="detail total"><span>Total:</span><span>₹${paymentAmount.toFixed(2)}</span></div>
+            `;
+        } else {
+            pageTitle.textContent = "Nothing to Pay";
+            summaryContainer.innerHTML = `<p>No booking or overstay details found. <a href="/">Return home</a>.</p>`;
+            payBtn.style.display = 'none';
+            return;
+        }
+
+        payBtn.addEventListener('click', async () => {
+            payBtn.disabled = true;
+            payBtn.textContent = "Processing...";
+            try {
+                const orderResponse = await fetch('/api/create-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ amount: paymentAmount })
+                });
+                const orderData = await orderResponse.json();
+                const options = {
+                    key: "rzp_test_mXj3oPO0jvACat", // !!! IMPORTANT: Replace with your Key ID
+                    amount: orderData.amount,
+                    currency: orderData.currency,
+                    name: "Smart Park",
+                    description: paymentDescription,
+                    order_id: orderData.order_id,
+                    handler: async function (response) {
+                        let verificationBody = {
+                            order_id: orderData.order_id,
+                            payment_id: response.razorpay_payment_id,
+                            signature: response.razorpay_signature
+                        };
+                        if (overstayDetails) {
+                            verificationBody.paymentType = 'overstay';
+                            verificationBody.bookingId = overstayDetails.bookingId;
+                        } else {
+                            verificationBody.paymentType = 'new_booking';
+                            verificationBody.bookingDetails = newBookingDetails;
+                        }
+                        const verificationResponse = await fetch('/api/verify-payment', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(verificationBody)
+                        });
+                        const verificationData = await verificationResponse.json();
+                        if (verificationData.verified) {
+                            sessionStorage.removeItem('overstayDetails');
+                            sessionStorage.removeItem('bookingDetails');
+                            window.location.href = `confirmation.html?bookingId=${verificationData.bookingId}&paymentId=${verificationData.paymentId}`;
+                        } else {
+                            alert("Payment verification failed.");
+                            payBtn.disabled = false; payBtn.textContent = "Pay Now";
+                        }
+                    },
+                    prefill: { name: "Valued Customer" },
+                    theme: { color: "#007BFF" }
+                };
+                const rzp = new Razorpay(options);
+                rzp.on('payment.failed', function (response){
+                    alert("Payment Failed: " + response.error.description);
+                    payBtn.disabled = false; payBtn.textContent = "Pay Now";
+                });
+                rzp.open();
+            } catch (error) {
+                console.error("Payment initiation failed:", error);
+                alert("Could not connect to payment service. Please try again.");
+                payBtn.disabled = false;
+                payBtn.textContent = "Pay Now";
+            }
+        });
+    });
+    </script>
+</body>
+</html>
